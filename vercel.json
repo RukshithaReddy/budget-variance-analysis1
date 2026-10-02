@@ -1,0 +1,5 @@
+{
+  "functions": {
+    "api/explain.js": { "includeFiles": "skill/**", "maxDuration": 30 }
+  }
+}

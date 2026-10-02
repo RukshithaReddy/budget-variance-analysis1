@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Budget vs Actual Variance Explainer</title>
+<style>
+  :root {
+    --ink: #14212b;
+    --muted: #55636f;
+    --paper: #f3f5f7;
+    --panel: #ffffff;
+    --line: #d5dce2;
+    --accent: #0f5c5c;
+    --accent-ink: #ffffff;
+    --good: #1b6b3a;
+    --good-bg: #e4f2e9;
+    --bad: #a4261d;
+    --bad-bg: #fbe6e3;
+    --flag: #a4261d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font: 700 30px/1.2 Georgia, "Times New Roman", serif; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 { font: 700 20px/1.3 Georgia, "Times New Roman", serif; margin: 0 0 12px; }
+  .lede { color: var(--muted); max-width: 62ch; margin: 0 0 24px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 20px; margin-bottom: 20px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  td.num, th.num { text-align: right; }
+  input, select {
+    font: inherit; color: var(--ink); padding: 7px 8px; border: 1px solid #aab6bf; border-radius: 4px; background: #fff; width: 100%;
+  }
+  input[type=number] { text-align: right; min-width: 110px; }
+  input:focus-visible, select:focus-visible, button:focus-visible { outline: 3px solid #8fc4c4; outline-offset: 1px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-top: 16px; }
+  .threshold { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .threshold input { width: 80px; min-width: 0; }
+  button {
+    font: inherit; font-weight: 600; padding: 9px 16px; border-radius: 4px; cursor: pointer;
+    border: 1px solid var(--accent); background: #fff; color: var(--accent);
+  }
+  button.primary { background: var(--accent); color: var(--accent-ink); margin-left: auto; }
+  button:disabled { opacity: .6; cursor: progress; }
+  button.remove { border-color: var(--line); color: var(--muted); padding: 6px 10px; }
+  #status { margin: 12px 0 0; min-height: 1.5em; color: var(--muted); }
+  #status.error { color: var(--bad); }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 13px; font-weight: 600; }
+  .tag.fav { background: var(--good-bg); color: var(--good); }
+  .tag.adv { background: var(--bad-bg); color: var(--bad); }
+  .tag.on { background: #e9edf0; color: var(--muted); }
+  tr.flagged td:first-child { box-shadow: inset 4px 0 0 var(--flag); padding-left: 12px; }
+  .review { color: var(--flag); font-weight: 600; font-size: 13px; }
+  tfoot td { font-weight: 600; background: #f8fafb; }
+  .commentary { white-space: pre-wrap; max-width: 70ch; }
+  .note { color: var(--muted); font-size: 14px; margin-top: 12px; }
+  @media (max-width: 600px) { h1 { font-size: 24px; } button.primary { margin-left: 0; width: 100%; } }
+  @media (prefers-reduced-motion: no-preference) { button { transition: background .15s; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Budget vs actual variance explainer</h1>
+  <p class="lede">Enter budget and actual figures. The app calculates every variance in code, so the numbers are exact. Claude then writes the commentary using the rules in a written Skill (SKILL.md).</p>
+
+  <section class="panel" aria-labelledby="input-h">
+    <h2 id="input-h">Your figures</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Line item</th><th>Type</th><th class="num">Budget (Rs)</th><th class="num">Actual (Rs)</th><th><span class="sr" style="position:absolute;left:-9999px">Remove</span></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="controls">
+      <button type="button" id="add">Add line</button>
+      <label class="threshold">Review threshold <input id="threshold" type="number" min="0" max="100" step="1" value="10"> %</label>
+      <button type="button" id="run" class="primary">Explain variances</button>
+    </div>
+    <p id="status" role="status"></p>
+    <p class="note">The rows above are sample figures. Replace them with your own.</p>
+  </section>
+
+  <section id="results" hidden>
+    <div class="panel">
+      <h2>Variance table</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Line item</th><th>Type</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th><th class="num">Variance %</th><th>Result</th></tr>
+          </thead>
+          <tbody id="out-rows"></tbody>
+          <tfoot id="out-totals"></tfoot>
+        </table>
+      </div>
+      <p class="note">Lines marked "Review" are beyond the threshold. Favourable means better for profit: lower expenses or higher revenue.</p>
+    </div>
+    <div class="panel">
+      <h2>Commentary</h2>
+      <div id="commentary" class="commentary"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+  const SAMPLE = [
+    ["Sales revenue", "revenue", 500000, 540000],
+    ["Salaries", "expense", 220000, 224000],
+    ["Marketing", "expense", 100000, 118000],
+    ["Rent", "expense", 60000, 60000],
+    ["Travel", "expense", 30000, 21000]
+  ];
+  const rowsEl = document.getElementById("rows");
+  const statusEl = document.getElementById("status");
+  const runBtn = document.getElementById("run");
+
+  function addRow(name, type, budget, actual) {
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      '<td><input type="text" maxlength="60" aria-label="Line item" placeholder="e.g. Marketing"></td>' +
+      '<td><select aria-label="Type"><option value="expense">Expense</option><option value="revenue">Revenue</option></select></td>' +
+      '<td><input type="number" min="0" step="any" aria-label="Budget"></td>' +
+      '<td><input type="number" min="0" step="any" aria-label="Actual"></td>' +
+      '<td><button type="button" class="remove" aria-label="Remove line">Remove</button></td>';
+    const f = tr.querySelectorAll("input,select");
+    f[0].value = name || ""; f[1].value = type || "expense";
+    f[2].value = budget === undefined ? "" : budget; f[3].value = actual === undefined ? "" : actual;
+    tr.querySelector(".remove").addEventListener("click", () => tr.remove());
+    rowsEl.appendChild(tr);
+  }
+  SAMPLE.forEach(r => addRow(...r));
+  document.getElementById("add").addEventListener("click", () => addRow());
+
+  const inr = n => Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  const signed = n => (n > 0 ? "+" : n < 0 ? "-" : "") + inr(Math.abs(n));
+
+  function tag(result) {
+    const s = document.createElement("span");
+    s.className = "tag " + (result === "Favourable" ? "fav" : result === "Adverse" ? "adv" : "on");
+    s.textContent = result;
+    return s;
+  }
+  function cell(tr, text, cls) {
+    const td = document.createElement("td");
+    if (cls) td.className = cls;
+    td.textContent = text;
+    tr.appendChild(td);
+    return td;
+  }
+
+  function collect() {
+    return [...rowsEl.querySelectorAll("tr")].map(tr => {
+      const f = tr.querySelectorAll("input,select");
+      return { name: f[0].value.trim(), type: f[1].value, budget: f[2].value, actual: f[3].value };
+    });
+  }
+
+  function render(data) {
+    const body = document.getElementById("out-rows");
+    body.textContent = "";
+    data.rows.forEach(r => {
+      const tr = document.createElement("tr");
+      if (r.flagged) tr.className = "flagged";
+      const first = cell(tr, r.name);
+      if (r.flagged) {
+        const rv = document.createElement("div"); rv.className = "review"; rv.textContent = "Review"; first.appendChild(rv);
+      }
+      cell(tr, r.type === "revenue" ? "Revenue" : "Expense");
+      cell(tr, inr(r.budget), "num");
+      cell(tr, inr(r.actual), "num");
+      cell(tr, signed(r.variance), "num");
+      cell(tr, r.variancePct === null ? "n/a" : signed(r.variancePct) + "%", "num");
+      const td = document.createElement("td"); td.appendChild(tag(r.result)); tr.appendChild(td);
+      body.appendChild(tr);
+    });
+    const t = data.totals, foot = document.getElementById("out-totals");
+    foot.textContent = "";
+    const mk = (label, b, a, v, p, res) => {
+      const tr = document.createElement("tr");
+      cell(tr, label); cell(tr, "");
+      cell(tr, inr(b), "num"); cell(tr, inr(a), "num");
+      cell(tr, v === null ? "" : signed(v), "num");
+      cell(tr, p === null || p === undefined ? "" : signed(p) + "%", "num");
+      const td = document.createElement("td"); if (res) td.appendChild(tag(res)); tr.appendChild(td);
+      foot.appendChild(tr);
+    };
+    mk("Total revenue", t.revenueBudget, t.revenueActual, t.revenueActual - t.revenueBudget, null);
+    mk("Total expenses", t.expenseBudget, t.expenseActual, t.expenseActual - t.expenseBudget, null);
+    mk("Net (revenue minus expenses)", t.netBudget, t.netActual, t.netVariance, t.netVariancePct, t.netResult);
+
+    const c = document.getElementById("commentary");
+    c.textContent = data.commentary || ("Commentary unavailable: " + (data.commentaryError || "unknown error") + ". The variance table above is still correct.");
+    const res = document.getElementById("results");
+    res.hidden = false;
+    res.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  runBtn.addEventListener("click", async () => {
+    statusEl.className = ""; statusEl.textContent = "Calculating and writing commentary...";
+    runBtn.disabled = true;
+    try {
+      const resp = await fetch("/api/explain", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ lines: collect(), threshold: document.getElementById("threshold").value })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "Something went wrong.");
+      statusEl.textContent = "";
+      render(data);
+    } catch (e) {
+      statusEl.className = "error";
+      statusEl.textContent = e.message;
+    } finally {
+      runBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

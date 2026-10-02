@@ -1,0 +1,7 @@
+{
+  "name": "variance-explainer",
+  "version": "1.0.0",
+  "description": "Budget vs actual variance explainer: exact maths in code, commentary written by Claude using a SKILL.md",
+  "private": true,
+  "engines": { "node": ">=18" }
+}
